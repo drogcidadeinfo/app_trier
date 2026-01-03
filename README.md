@@ -1,1 +1,1 @@
-# app_trier
+relação vendas app/trier
