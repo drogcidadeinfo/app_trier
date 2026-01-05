@@ -132,7 +132,7 @@ def update_google_sheet(df, sheet_id, worksheet_name="APP_TRIER"):
 def main():
     download_dir = '/home/runner/work/app_trier/app_trier/'
     latest_file = get_latest_file(directory=download_dir)
-    sheet_id = os.getenv("SHEET_ID")
+    sheet_id = os.getenv("sheet_id")
 
     if latest_file:
         logging.info(f"Loaded file: {latest_file}")
