@@ -8,7 +8,6 @@ import pandas as pd
 from datetime import datetime
 from google.oauth2.service_account import Credentials
 from googleapiclient.errors import HttpError
-from openpyxl.styles import Font
 
 # Config logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
@@ -51,7 +50,10 @@ def process_excel_data(input_file):
           ).any(), axis=1)
     ]
     
-    # Drop specific columns
+    # List ALL columns that exist in the DataFrame (for debugging)
+    logging.info(f"Original columns: {list(df.columns)}")
+    
+    # Drop specific columns - use the exact list from your working logic
     columns_to_drop = [
         'Unnamed: 0', 'Unnamed: 1', 'Unnamed: 3', 'Unnamed: 6', 'Unnamed: 7',
         'Unnamed: 8', 'Tipo', 'Unnamed: 10', 'Unnamed: 11', 'Tele',
@@ -64,10 +66,24 @@ def process_excel_data(input_file):
         'Unnamed: 49', 'Núm.\nVenda', 'Cond.Pagto', 'ECF'
     ]
     
-    df = df.drop(columns=columns_to_drop, errors="ignore")
+    # Filter to only drop columns that actually exist
+    existing_columns_to_drop = [col for col in columns_to_drop if col in df.columns]
+    logging.info(f"Dropping columns: {existing_columns_to_drop}")
     
-    # Rename columns
-    df = df.rename(columns={
+    df = df.drop(columns=existing_columns_to_drop, errors="ignore")
+    
+    # Check what columns remain after dropping
+    logging.info(f"Columns after dropping: {list(df.columns)}")
+    
+    # Check if we have enough columns to rename
+    if len(df.columns) < 10:
+        logging.error(f"Expected at least 10 columns, but got {len(df.columns)}")
+        # Try to identify what's happening
+        logging.info(f"Current columns: {list(df.columns)}")
+        return df
+    
+    # Rename columns - only rename the first 10 columns as per your logic
+    rename_dict = {
         df.columns[0]: 'Filial',
         df.columns[1]: 'Emissão',
         df.columns[2]: 'Hora',
@@ -78,10 +94,12 @@ def process_excel_data(input_file):
         df.columns[7]: 'Valor Desconto',
         df.columns[8]: 'Valor Líquido',
         df.columns[9]: 'Total Líquido',
-    })
+    }
+    
+    logging.info(f"Renaming columns: {rename_dict}")
+    df = df.rename(columns=rename_dict)
     
     # Convert and format date/time columns
-    # Use dayfirst=True for Brazilian date format (dd/mm/yyyy)
     df['Emissão'] = pd.to_datetime(df['Emissão'], errors='coerce', dayfirst=True)
     df['Hora'] = pd.to_datetime(df['Hora'], errors='coerce')
     
@@ -89,11 +107,19 @@ def process_excel_data(input_file):
     df['Emissão'] = df['Emissão'].dt.strftime('%d/%m/%Y')  # Format: dd/mm/yyyy
     df['Hora'] = df['Hora'].dt.strftime('%H:%M:%S')  # Format: hh:mm:ss
     
+    # Now drop any remaining columns beyond the 10 we want
+    # This ensures we only keep the 10 columns we renamed
+    if len(df.columns) > 10:
+        columns_to_keep = ['Filial', 'Emissão', 'Hora', 'Documento Fiscal', 'Cliente', 
+                          'Vendedor', 'Valor Bruto', 'Valor Desconto', 'Valor Líquido', 
+                          'Total Líquido']
+        df = df[columns_to_keep]
+    
     # Reset index
     df = df.reset_index(drop=True)
     
     logging.info(f"Finished processing. Rows remaining: {len(df)}")
-    logging.info(f"Columns: {list(df.columns)}")
+    logging.info(f"Final columns: {list(df.columns)}")
     
     return df
 
@@ -160,7 +186,13 @@ def main():
                 return
             
             # Display sample data for verification
-            logging.info(f"Sample data:\n{processed_df.head()}")
+            logging.info(f"Sample data (first 5 rows):")
+            for i in range(min(5, len(processed_df))):
+                logging.info(f"Row {i}: {dict(zip(processed_df.columns, processed_df.iloc[i]))}")
+            
+            # Optional: Save to local file for debugging
+            # processed_df.to_excel("debug_output.xlsx", index=False)
+            # logging.info("Saved debug output to debug_output.xlsx")
             
             # Update Google Sheet
             update_google_sheet(processed_df, sheet_id, "APP_TRIER")
