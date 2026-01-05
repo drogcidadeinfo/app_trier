@@ -81,7 +81,8 @@ def process_excel_data(input_file):
     })
     
     # Convert and format date/time columns
-    df['Emissão'] = pd.to_datetime(df['Emissão'], errors='coerce')
+    # Use dayfirst=True for Brazilian date format (dd/mm/yyyy)
+    df['Emissão'] = pd.to_datetime(df['Emissão'], errors='coerce', dayfirst=True)
     df['Hora'] = pd.to_datetime(df['Hora'], errors='coerce')
     
     # Format the columns
@@ -95,6 +96,21 @@ def process_excel_data(input_file):
     logging.info(f"Columns: {list(df.columns)}")
     
     return df
+
+def convert_pandas_to_sheets_format(df):
+    """Convert pandas DataFrame to a format suitable for Google Sheets."""
+    # Replace NaN with empty strings
+    df = df.fillna("")
+    
+    # Convert all columns to string to handle mixed types and Timestamp objects
+    df = df.astype(str)
+    
+    # Get headers and values
+    headers = df.columns.tolist()
+    values = df.values.tolist()
+    
+    # Combine headers and values
+    return [headers] + values
 
 def update_google_sheet(df, sheet_id, worksheet_name="APP_TRIER"):
     """Update Google Sheet with the processed data"""
@@ -117,16 +133,15 @@ def update_google_sheet(df, sheet_id, worksheet_name="APP_TRIER"):
         logging.error(f"Error accessing spreadsheet: {e}")
         return
 
-    # Prepare data
+    # Prepare data in Google Sheets compatible format
     logging.info("Preparing data for Google Sheets...")
-    df = df.fillna("")  # Ensure no NaN values
-    rows = [df.columns.tolist()] + df.values.tolist()
+    rows = convert_pandas_to_sheets_format(df)
 
     # Clear sheet and update
     logging.info("Clearing existing data...")
     sheet.clear()
-    logging.info("Uploading new data...")
-    retry_api_call(lambda: sheet.update(rows))
+    logging.info(f"Uploading {len(rows)} rows of data...")
+    retry_api_call(lambda: sheet.update(rows, value_input_option='USER_ENTERED'))
     logging.info("Google Sheet updated successfully.")
 
 def main():
@@ -152,6 +167,8 @@ def main():
             
         except Exception as e:
             logging.error(f"Error processing file: {e}")
+            import traceback
+            traceback.print_exc()
             return
     else:
         logging.warning("No new files to process.")
