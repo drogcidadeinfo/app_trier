@@ -1,4 +1,4 @@
-name: notas_transf_up
+name: app_trier_up
 
 on:
   workflow_dispatch: 
