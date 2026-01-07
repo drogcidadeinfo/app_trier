@@ -37,10 +37,10 @@ def process_excel_data(input_file):
     """Load Excel, process data according to new logic."""
     logging.info("Processing Excel file...")
     
-    # Read Excel with skiprows=10 as per new logic
+    # Read Excel with skiprows=10 as per your working logic
     df = pd.read_excel(input_file, skiprows=10, header=0)
     
-    # Remove rows containing "Total Filial:" or "Total Geral:"
+    # Remove rows containing "Total Filial:" or "Total Geral:" - EXACTLY as in your working code
     df = df[
         ~df.astype(str)
           .apply(lambda row: row.str.contains(
@@ -53,17 +53,17 @@ def process_excel_data(input_file):
     # List ALL columns that exist in the DataFrame (for debugging)
     logging.info(f"Original columns: {list(df.columns)}")
     
-    # Drop specific columns - use the exact list from your working logic
+    # Drop specific columns - using EXACTLY the same columns from your working code
     columns_to_drop = [
-        'Unnamed: 0', 'Unnamed: 1', 'Unnamed: 3', 'Unnamed: 6', 'Unnamed: 7',
-        'Unnamed: 8', 'Tipo', 'Unnamed: 10', 'Unnamed: 11', 'Tele',
-        'Unnamed: 13', 'Unnamed: 14', 'Unnamed: 15', 'Emissão', 'Unnamed: 18',
-        'Unnamed: 19', 'Unnamed: 22', 'Modelo', 'Unnamed: 24', 'Unnamed: 25',
-        'Unnamed: 28', 'Unnamed: 29', 'Unnamed: 30', 'Vend. Dev.',
-        'Unnamed: 32', 'Unnamed: 33', 'Unnamed: 35', 'Unnamed: 36', '% Desc.',
-        'Unnamed: 39', 'Unnamed: 40', 'Unnamed: 42', 'Unnamed: 43',
-        'Unnamed: 45', 'Unnamed: 46', 'Vlr. Reemb.', 'Unnamed: 48',
-        'Unnamed: 49', 'Núm.\nVenda', 'Cond.Pagto', 'ECF'
+        'Unnamed: 0', 'Núm.\nVenda', 'Unnamed: 5', 'Unnamed: 6', 
+        'Cond.Pagto', 'Unnamed: 7', 'Tipo', 'Unnamed: 9', 'Unnamed: 10', 
+        'Tele', 'Unnamed: 12', 'Unnamed: 13', 'Unnamed: 14', 'Unnamed: 15',
+        'Emissão', 'Unnamed: 17', 'Unnamed: 18', 'ECF', 'Unnamed: 21', 
+        'Modelo', 'Unnamed: 23', 'Unnamed: 24', 'Unnamed: 27', 'Unnamed: 28',
+        'Unnamed: 29', 'Vend. Dev.', 'Unnamed: 31', 'Unnamed: 32', 'Vend.',
+        'Unnamed: 34', 'Unnamed: 35', 'Unnamed: 38', 'Unnamed: 39', 
+        'Unnamed: 41', 'Unnamed: 42', 'Unnamed: 44', 'Unnamed: 45', 
+        'Vlr. Reemb.', 'Unnamed: 47', 'Unnamed: 48'
     ]
     
     # Filter to only drop columns that actually exist
@@ -78,19 +78,18 @@ def process_excel_data(input_file):
     # Check if we have enough columns to rename
     if len(df.columns) < 10:
         logging.error(f"Expected at least 10 columns, but got {len(df.columns)}")
-        # Try to identify what's happening
         logging.info(f"Current columns: {list(df.columns)}")
         return df
     
-    # Rename columns - only rename the first 10 columns as per your logic
+    # Rename columns - using EXACTLY the same renaming logic from your working code
     rename_dict = {
-        df.columns[0]: 'Filial',
-        df.columns[1]: 'Emissão',
+        df.columns[0]: 'Núm. Venda',
+        df.columns[1]: 'Filial',
         df.columns[2]: 'Hora',
         df.columns[3]: 'Documento Fiscal',
         df.columns[4]: 'Cliente',
-        df.columns[5]: 'Vendedor',
-        df.columns[6]: 'Valor Bruto',
+        df.columns[5]: 'Valor Bruto',
+        df.columns[6]: '% Desconto',
         df.columns[7]: 'Valor Desconto',
         df.columns[8]: 'Valor Líquido',
         df.columns[9]: 'Total Líquido',
@@ -99,21 +98,23 @@ def process_excel_data(input_file):
     logging.info(f"Renaming columns: {rename_dict}")
     df = df.rename(columns=rename_dict)
     
-    # Convert and format date/time columns
-    df['Emissão'] = pd.to_datetime(df['Emissão'], errors='coerce', dayfirst=True)
-    df['Hora'] = pd.to_datetime(df['Hora'], errors='coerce')
+    # Convert and format time column - EXACTLY as in your working code
+    try:
+        df['Hora'] = pd.to_datetime(df['Hora'], errors='coerce')
+        df['Hora'] = df['Hora'].dt.strftime('%H:%M:%S')  # Format: hh:mm:ss
+    except Exception as e:
+        logging.error(f"Error processing Hora column: {e}")
     
-    # Format the columns
-    df['Emissão'] = df['Emissão'].dt.strftime('%d/%m/%Y')  # Format: dd/mm/yyyy
-    df['Hora'] = df['Hora'].dt.strftime('%H:%M:%S')  # Format: hh:mm:ss
+    # Now keep only the 10 columns we want
+    columns_to_keep = [
+        'Núm. Venda', 'Filial', 'Hora', 'Documento Fiscal', 'Cliente',
+        'Valor Bruto', '% Desconto', 'Valor Desconto', 'Valor Líquido', 
+        'Total Líquido'
+    ]
     
-    # Now drop any remaining columns beyond the 10 we want
-    # This ensures we only keep the 10 columns we renamed
-    if len(df.columns) > 10:
-        columns_to_keep = ['Filial', 'Emissão', 'Hora', 'Documento Fiscal', 'Cliente', 
-                          'Vendedor', 'Valor Bruto', 'Valor Desconto', 'Valor Líquido', 
-                          'Total Líquido']
-        df = df[columns_to_keep]
+    # Only keep columns that exist (in case some were dropped earlier)
+    existing_columns_to_keep = [col for col in columns_to_keep if col in df.columns]
+    df = df[existing_columns_to_keep]
     
     # Reset index
     df = df.reset_index(drop=True)
