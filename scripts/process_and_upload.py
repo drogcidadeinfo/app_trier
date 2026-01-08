@@ -5,6 +5,7 @@ import json
 import time
 import logging
 import pandas as pd
+import numpy as np
 from datetime import datetime
 from google.oauth2.service_account import Credentials
 from googleapiclient.errors import HttpError
