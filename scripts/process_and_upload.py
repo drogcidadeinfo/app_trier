@@ -141,58 +141,35 @@ def process_excel_data(input_file):
 
 def convert_pandas_to_sheets_format(df):
     """Convert pandas DataFrame to a format suitable for Google Sheets."""
-    # Make a copy to avoid modifying the original dataframe
-    df_copy = df.copy()
+    # Replace NaN with empty strings
+    df = df.fillna("")
     
-    # For each column, check if it contains numeric data
-    for col in df_copy.columns:
-        try:
-            # Try to convert to numeric
-            numeric_series = pd.to_numeric(df_copy[col], errors='coerce')
-            
-            # Check if all non-NaN values are integers
-            is_integer_column = (
-                not numeric_series.dropna().empty and 
-                all(numeric_series.dropna().apply(lambda x: pd.notna(x) and float(x).is_integer()))
-            )
-            
-            if is_integer_column:
-                # Convert to integers (no .0)
-                df_copy[col] = numeric_series.astype('Int64')  # Use Int64 to preserve NaN
-            else:
-                # Keep as float but we'll handle formatting differently
-                df_copy[col] = numeric_series
-                
-        except (ValueError, TypeError):
-            # If conversion fails, keep as string
-            pass
+    # Process each cell to clean .0 from whole numbers
+    def clean_value(val):
+        if isinstance(val, (int, np.integer)):
+            return val
+        if isinstance(val, (float, np.floating)):
+            if val.is_integer():
+                return int(val)
+            return val
+        if isinstance(val, str):
+            # Remove .0 from end of string numbers
+            if val.endswith('.0'):
+                try:
+                    num = float(val)
+                    if num.is_integer():
+                        return int(num)
+                except:
+                    pass
+        return val
     
-    # Replace NaN with empty strings for Google Sheets
-    df_copy = df_copy.where(pd.notna(df_copy), "")
+    # Apply cleaning
+    cleaned_data = []
+    for _, row in df.iterrows():
+        cleaned_row = [clean_value(cell) for cell in row]
+        cleaned_data.append(cleaned_row)
     
-    # Convert all values to appropriate types for Google Sheets
-    rows = []
-    headers = df_copy.columns.tolist()
-    
-    # Build rows manually to ensure proper formatting
-    for _, row in df_copy.iterrows():
-        formatted_row = []
-        for value in row:
-            if isinstance(value, (int, np.integer)):
-                formatted_row.append(int(value))
-            elif isinstance(value, (float, np.floating)):
-                # Check if it's a whole number
-                if pd.notna(value) and float(value).is_integer():
-                    formatted_row.append(int(value))
-                else:
-                    formatted_row.append(value)
-            elif pd.isna(value):
-                formatted_row.append("")
-            else:
-                formatted_row.append(str(value))
-        rows.append(formatted_row)
-    
-    return [headers] + rows
+    return [df.columns.tolist()] + cleaned_data
 
 def update_google_sheet(df, sheet_id, worksheet_name="APP_TRIER"):
     """Update Google Sheet with the processed data"""
