@@ -111,10 +111,10 @@ def reconcile_app_vs_trier(sheet):
             "Filial": filial,
             "Núm. Venda": trier_row["Núm. Venda"],
             "Cliente": trier_row["Cliente"],
-            "Hora": trier_row["Hora"],
             "Criado em (APP)": match.get("Criado em", ""),
-            "Total Líquido": total_liquido,
+            "Hora (Trier)": trier_row["Hora"],
             "Valor Venda APP": round(match["APP_VALOR_NUM"], 2),
+            "Total Líquido (Trier)": total_liquido,
             "Status": status
         })
 
@@ -134,10 +134,10 @@ def build_no_match_row(trier_row):
         "Filial": trier_row["Filial"],
         "Núm. Venda": trier_row["Núm. Venda"],
         "Cliente": trier_row["Cliente"],
-        "Hora": trier_row["Hora"],
         "Criado em (APP)": "",
-        "Total Líquido": parse_brl_currency(trier_row["Total Líquido"]),
+        "Hora (Trier)": trier_row["Hora"],
         "Valor Venda APP": "",
+        "Total Líquido (Trier)": parse_brl_currency(trier_row["Total Líquido"]),
         "Status": "SEM CORRESPONDÊNCIA"
     }
 
