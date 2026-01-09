@@ -53,6 +53,20 @@ def parse_trier_time(hora, reference_date):
     t = datetime.strptime(hora, "%H:%M:%S").time()
     return datetime.combine(reference_date.date(), t)
 
+def parse_brl_currency(value):
+    if value is None or value == "":
+        return 0.0
+
+    if isinstance(value, (int, float)):
+        return float(value)
+
+    return float(
+        value.replace("R$", "")
+             .replace(" ", "")
+             .replace(".", "")
+             .replace(",", ".")
+    )
+
 # ================= MAIN LOGIC =================
 
 def reconcile_app_vs_trier(sheet):
@@ -76,7 +90,7 @@ def reconcile_app_vs_trier(sheet):
 
     for _, trier_row in df_trier.iterrows():
         filial = trier_row["Filial"]
-        total_liquido = float(trier_row["Total Líquido"])
+        total_liquido = parse_brl_currency(trier_row["Total Líquido"])
         hora_trier = trier_row["Hora"]
 
         # Filter APP by filial
@@ -91,7 +105,11 @@ def reconcile_app_vs_trier(sheet):
         trier_datetime = parse_trier_time(hora_trier, ref_date)
 
         # Compute diffs
-        candidates["VALOR_DIFF"] = candidates["Valor"].astype(float) - total_liquido
+        candidates["APP_VALOR_NUM"] = candidates["Valor"].apply(parse_brl_currency)
+
+        candidates["VALOR_DIFF"] = candidates["APP_VALOR_NUM"] - total_liquido
+        candidates["VALOR_DIFF_ABS"] = candidates["VALOR_DIFF"].abs()
+
         candidates["VALOR_DIFF_ABS"] = candidates["VALOR_DIFF"].abs()
         candidates["TIME_DIFF_MIN"] = (
             candidates["APP_DATETIME"] - trier_datetime
