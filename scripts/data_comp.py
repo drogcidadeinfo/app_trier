@@ -65,7 +65,6 @@ def parse_brl_currency(value):
 def time_to_minutes(t):
     return t.hour * 60 + t.minute
 
-
 # ================= MAIN LOGIC =================
 
 def reconcile_app_vs_trier(sheet):
@@ -80,7 +79,7 @@ def reconcile_app_vs_trier(sheet):
     df_trier.columns = df_trier.columns.str.strip()
 
     # Filter valid payments
-    df_app = df_app[df_app["Pagamento"].isin(["PIX", "Cartão"])].copy()
+    df_app = df_app[df_app["Pagamento"].isin(["Pix", "Cartão"])].copy()
 
     # Parse APP values
     df_app["APP_VALOR_NUM"] = df_app["Valor"].apply(parse_brl_currency)
@@ -99,7 +98,8 @@ def reconcile_app_vs_trier(sheet):
         total_liquido = parse_brl_currency(trier_row["Total Líquido"])
         hora_trier = trier_row["Hora"]
 
-        candidates = df_app[df_app["Filial"] == filial].copy()
+        # candidates = df_app[df_app["Filial"] == filial].copy()
+        candidates = df_app.copy()
 
         if candidates.empty:
             results.append(build_no_match_row(trier_row))
