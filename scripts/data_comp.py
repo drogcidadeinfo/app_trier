@@ -123,9 +123,9 @@ def reconcile_app_vs_trier(sheet):
 
 def classify_status(diff_abs):
     if diff_abs == 0:
-        return "MATCH"
+        return "OK"
     if diff_abs <= VALUE_TOLERANCE:
-        return "MATCH (AJUSTE)"
+        return "OK (AJUSTE)"
     return "VALOR DIVERGENTE"
 
 
