@@ -27,13 +27,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install selenium numpy pandas openpyxl xlrd gspread google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client packaging
       
-      - name: Download main table
-        env:
-          trier_user: ${{ secrets.USERNAME }}
-          trier_password: ${{ secrets.PASSWORD }}
-        run: python scripts/raw_vendas_trier.py
+      #- name: Download main table
+        #env:
+          #trier_user: ${{ secrets.USERNAME }}
+          #trier_password: ${{ secrets.PASSWORD }}
+        #run: python scripts/raw_vendas_trier.py
 
-      - name: Process and upload to google sheets
+      #- name: Process and upload to google sheets
+        #env:
+          #GSA_CREDENTIALS: ${{ secrets.GSA_CREDENTIALS }}
+          #sheet_id: ${{ secrets.SHEET_ID }}
+        #run: python scripts/process_and_upload.py 
+
+      - name: Data Comparison  
         env:
           GSA_CREDENTIALS: ${{ secrets.GSA_CREDENTIALS }}
           sheet_id: ${{ secrets.SHEET_ID }}
