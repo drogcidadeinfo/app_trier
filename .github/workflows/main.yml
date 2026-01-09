@@ -43,4 +43,4 @@ jobs:
         env:
           GSA_CREDENTIALS: ${{ secrets.GSA_CREDENTIALS }}
           sheet_id: ${{ secrets.SHEET_ID }}
-        run: python scripts/process_and_upload.py 
+        run: python scripts/data_comp.py 
