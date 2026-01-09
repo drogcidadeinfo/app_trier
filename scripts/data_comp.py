@@ -9,7 +9,6 @@ from google.oauth2.service_account import Credentials
 # ================= CONFIG =================
 
 VALUE_TOLERANCE = 0.15      # R$
-TIME_TOLERANCE_MIN = 5     # minutes
 
 SOURCE_SHEET_ID = os.getenv("sheet_id")
 CREDS_JSON = os.getenv("GSA_CREDENTIALS")
@@ -61,10 +60,6 @@ def parse_brl_currency(value):
              .replace(",", ".")
     )
 
-
-def time_to_minutes(t):
-    return t.hour * 60 + t.minute
-
 # ================= MAIN LOGIC =================
 
 def reconcile_app_vs_trier(sheet):
@@ -84,28 +79,19 @@ def reconcile_app_vs_trier(sheet):
     # Parse APP values
     df_app["APP_VALOR_NUM"] = df_app["Valor"].apply(parse_brl_currency)
 
-    # Parse APP time only
-    df_app["APP_TIME"] = pd.to_datetime(
-        df_app["Criado em"],
-        format="%d/%m/%Y %H:%M:%S",
-        errors="coerce"
-    ).dt.time
-
     results = []
 
     for _, trier_row in df_trier.iterrows():
         filial = trier_row["Filial"]
         total_liquido = parse_brl_currency(trier_row["Total Líquido"])
-        hora_trier = trier_row["Hora"]
 
-        # candidates = df_app[df_app["Filial"] == filial].copy()
+        # Value-based candidates only
         candidates = df_app.copy()
 
         if candidates.empty:
             results.append(build_no_match_row(trier_row))
             continue
 
-        # Value comparison
         candidates["VALOR_DIFF_ABS"] = (
             candidates["APP_VALOR_NUM"] - total_liquido
         ).abs()
@@ -116,26 +102,8 @@ def reconcile_app_vs_trier(sheet):
             results.append(build_no_match_row(trier_row))
             continue
 
-        # Time comparison (minutes only)
-        try:
-            trier_time = datetime.strptime(hora_trier, "%H:%M:%S").time()
-        except Exception:
-            results.append(build_no_match_row(trier_row))
-            continue
-
-        candidates["TIME_DIFF_MIN"] = candidates["APP_TIME"].apply(
-            lambda t: abs(time_to_minutes(t) - time_to_minutes(trier_time))
-            if pd.notna(t) else 9999
-        )
-
-        candidates = candidates[candidates["TIME_DIFF_MIN"] <= TIME_TOLERANCE_MIN]
-
-        if candidates.empty:
-            results.append(build_no_match_row(trier_row))
-            continue
-
-        # Pick closest time
-        match = candidates.sort_values("TIME_DIFF_MIN").iloc[0]
+        # Pick closest value
+        match = candidates.sort_values("VALOR_DIFF_ABS").iloc[0]
 
         status = classify_status(match["VALOR_DIFF_ABS"])
 
@@ -143,7 +111,8 @@ def reconcile_app_vs_trier(sheet):
             "Filial": filial,
             "Núm. Venda": trier_row["Núm. Venda"],
             "Cliente": trier_row["Cliente"],
-            "Hora": hora_trier,
+            "Hora": trier_row["Hora"],
+            "Criado em (APP)": match.get("Criado em", ""),
             "Total Líquido": total_liquido,
             "Valor Venda APP": round(match["APP_VALOR_NUM"], 2),
             "Status": status
@@ -166,6 +135,7 @@ def build_no_match_row(trier_row):
         "Núm. Venda": trier_row["Núm. Venda"],
         "Cliente": trier_row["Cliente"],
         "Hora": trier_row["Hora"],
+        "Criado em (APP)": "",
         "Total Líquido": parse_brl_currency(trier_row["Total Líquido"]),
         "Valor Venda APP": "",
         "Status": "SEM CORRESPONDÊNCIA"
