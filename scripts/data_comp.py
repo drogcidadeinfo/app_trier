@@ -1,7 +1,8 @@
 import os
+import json
 import logging
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -17,7 +18,10 @@ APP_SHEET = "APP"
 APP_TRIER_SHEET = "APP_TRIER"
 OUTPUT_SHEET = "APPXTRIER"
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 # ================= HELPERS =================
 
@@ -31,8 +35,7 @@ def connect_sheet():
 
 def read_worksheet_as_df(sheet, name):
     ws = sheet.worksheet(name)
-    data = ws.get_all_records()
-    return pd.DataFrame(data)
+    return pd.DataFrame(ws.get_all_records())
 
 
 def clear_and_write(sheet, name, df):
@@ -40,23 +43,14 @@ def clear_and_write(sheet, name, df):
         ws = sheet.worksheet(name)
         ws.clear()
     except gspread.WorksheetNotFound:
-        ws = sheet.add_worksheet(title=name, rows=1000, cols=30)
+        ws = sheet.add_worksheet(title=name, rows=1000, cols=20)
 
     ws.update([df.columns.tolist()] + df.fillna("").values.tolist())
 
 
-def parse_app_datetime(value):
-    return datetime.strptime(value, "%d/%m/%Y %H:%M:%S")
-
-
-def parse_trier_time(hora, reference_date):
-    t = datetime.strptime(hora, "%H:%M:%S").time()
-    return datetime.combine(reference_date.date(), t)
-
 def parse_brl_currency(value):
     if value is None or value == "":
         return 0.0
-
     if isinstance(value, (int, float)):
         return float(value)
 
@@ -67,6 +61,11 @@ def parse_brl_currency(value):
              .replace(",", ".")
     )
 
+
+def time_to_minutes(t):
+    return t.hour * 60 + t.minute
+
+
 # ================= MAIN LOGIC =================
 
 def reconcile_app_vs_trier(sheet):
@@ -76,15 +75,22 @@ def reconcile_app_vs_trier(sheet):
     logging.info("Reading APP_TRIER...")
     df_trier = read_worksheet_as_df(sheet, APP_TRIER_SHEET)
 
-    # Clean columns
+    # Normalize columns
     df_app.columns = df_app.columns.str.strip()
     df_trier.columns = df_trier.columns.str.strip()
 
-    # Filter APP payments
-    df_app = df_app[df_app["Pagamento"].isin(["PIX", "Cartão"])]
+    # Filter valid payments
+    df_app = df_app[df_app["Pagamento"].isin(["PIX", "Cartão"])].copy()
 
-    # Parse datetimes
-    df_app["APP_DATETIME"] = df_app["Criado em"].apply(parse_app_datetime)
+    # Parse APP values
+    df_app["APP_VALOR_NUM"] = df_app["Valor"].apply(parse_brl_currency)
+
+    # Parse APP time only
+    df_app["APP_TIME"] = pd.to_datetime(
+        df_app["Criado em"],
+        format="%d/%m/%Y %H:%M:%S",
+        errors="coerce"
+    ).dt.time
 
     results = []
 
@@ -93,36 +99,42 @@ def reconcile_app_vs_trier(sheet):
         total_liquido = parse_brl_currency(trier_row["Total Líquido"])
         hora_trier = trier_row["Hora"]
 
-        # Filter APP by filial
         candidates = df_app[df_app["Filial"] == filial].copy()
 
         if candidates.empty:
             results.append(build_no_match_row(trier_row))
             continue
 
-        # Build datetime for Trier
-        ref_date = candidates.iloc[0]["APP_DATETIME"]
-        trier_datetime = parse_trier_time(hora_trier, ref_date)
+        # Value comparison
+        candidates["VALOR_DIFF_ABS"] = (
+            candidates["APP_VALOR_NUM"] - total_liquido
+        ).abs()
 
-        # Compute diffs
-        candidates["APP_VALOR_NUM"] = candidates["Valor"].apply(parse_brl_currency)
+        candidates = candidates[candidates["VALOR_DIFF_ABS"] <= VALUE_TOLERANCE]
 
-        candidates["VALOR_DIFF"] = candidates["APP_VALOR_NUM"] - total_liquido
-        candidates["VALOR_DIFF_ABS"] = candidates["VALOR_DIFF"].abs()
+        if candidates.empty:
+            results.append(build_no_match_row(trier_row))
+            continue
 
-        candidates["VALOR_DIFF_ABS"] = candidates["VALOR_DIFF"].abs()
-        candidates["TIME_DIFF_MIN"] = (
-            candidates["APP_DATETIME"] - trier_datetime
-        ).abs().dt.total_seconds() / 60
+        # Time comparison (minutes only)
+        try:
+            trier_time = datetime.strptime(hora_trier, "%H:%M:%S").time()
+        except Exception:
+            results.append(build_no_match_row(trier_row))
+            continue
 
-        # Filter by time tolerance
+        candidates["TIME_DIFF_MIN"] = candidates["APP_TIME"].apply(
+            lambda t: abs(time_to_minutes(t) - time_to_minutes(trier_time))
+            if pd.notna(t) else 9999
+        )
+
         candidates = candidates[candidates["TIME_DIFF_MIN"] <= TIME_TOLERANCE_MIN]
 
         if candidates.empty:
             results.append(build_no_match_row(trier_row))
             continue
 
-        # Pick closest time match
+        # Pick closest time
         match = candidates.sort_values("TIME_DIFF_MIN").iloc[0]
 
         status = classify_status(match["VALOR_DIFF_ABS"])
@@ -133,24 +145,17 @@ def reconcile_app_vs_trier(sheet):
             "Cliente": trier_row["Cliente"],
             "Hora": hora_trier,
             "Total Líquido": total_liquido,
-            "APP Valor": match["Valor"],
-            "APP Pagamento": match["Pagamento"],
-            "APP Criado em": match["Criado em"],
-            "Diferença (R$)": round(match["VALOR_DIFF"], 2),
-            "Diferença Absoluta": round(match["VALOR_DIFF_ABS"], 2),
-            "Diferença Aceita": "SIM" if match["VALOR_DIFF_ABS"] <= VALUE_TOLERANCE else "NÃO",
-            "Diferença de Tempo (min)": int(match["TIME_DIFF_MIN"]),
-            "Tempo Aceito": "SIM",
+            "Valor Venda APP": round(match["APP_VALOR_NUM"], 2),
             "Status": status
         })
 
     return pd.DataFrame(results)
 
 
-def classify_status(valor_diff_abs):
-    if valor_diff_abs == 0:
+def classify_status(diff_abs):
+    if diff_abs == 0:
         return "MATCH"
-    if valor_diff_abs <= VALUE_TOLERANCE:
+    if diff_abs <= VALUE_TOLERANCE:
         return "MATCH (AJUSTE)"
     return "VALOR DIVERGENTE"
 
@@ -161,15 +166,8 @@ def build_no_match_row(trier_row):
         "Núm. Venda": trier_row["Núm. Venda"],
         "Cliente": trier_row["Cliente"],
         "Hora": trier_row["Hora"],
-        "Total Líquido": trier_row["Total Líquido"],
-        "APP Valor": "",
-        "APP Pagamento": "",
-        "APP Criado em": "",
-        "Diferença (R$)": "",
-        "Diferença Absoluta": "",
-        "Diferença Aceita": "",
-        "Diferença de Tempo (min)": "",
-        "Tempo Aceito": "",
+        "Total Líquido": parse_brl_currency(trier_row["Total Líquido"]),
+        "Valor Venda APP": "",
         "Status": "SEM CORRESPONDÊNCIA"
     }
 
@@ -179,9 +177,8 @@ def main():
     sheet = connect_sheet()
     df_result = reconcile_app_vs_trier(sheet)
     clear_and_write(sheet, OUTPUT_SHEET, df_result)
-    logging.info("APPXTRIER reconciliation completed.")
+    logging.info("APPXTRIER reconciliation completed successfully.")
 
 
 if __name__ == "__main__":
-    import json
     main()
