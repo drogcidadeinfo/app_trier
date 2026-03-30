@@ -2,8 +2,8 @@ name: app_trier_up
 
 on:
   workflow_dispatch: 
-  schedule:
-    - cron: '0 9 * * *'  # Runs every day at 6am GMT-3
+  #schedule:
+    #- cron: '0 9 * * *'  # Runs every day at 6am GMT-3
 
 permissions: write-all # Give the workflow permission to write to the repository
 
