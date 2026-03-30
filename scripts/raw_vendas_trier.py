@@ -101,9 +101,9 @@ try:
     time.sleep(2)
     
     # start and end dates
-    driver.find_element(By.ID, "dat_inicio").send_keys(inicio)
+    driver.find_element(By.ID, "dat_inicio").send_keys("29032026")
     time.sleep(5)
-    driver.find_element(By.ID, "dat_fim").send_keys(fim)
+    driver.find_element(By.ID, "dat_fim").send_keys("29032026")
     time.sleep(2)
         
     # report format; downloads pdf file
