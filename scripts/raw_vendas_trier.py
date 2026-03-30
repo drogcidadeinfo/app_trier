@@ -23,9 +23,9 @@ if not username or not password:
 
 # Calculate date range
 today = datetime.today()
-report_date = today - timedelta(days=1)
-start_date = report_date - timedelta(days=1) if report_date.weekday() == 6 else report_date
-inicio = f"{start_date.strftime('%d/%m/%Y')}"  
+report_date = today - timedelta(days=1)  # yesterday
+start_date = today.replace(day=1)        # first day of current month
+inicio = f"{start_date.strftime('%d/%m/%Y')}"
 fim = f"{report_date.strftime('%d/%m/%Y')}"
 
 download_dir = os.getcwd()
